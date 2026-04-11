@@ -20,6 +20,7 @@ load_dotenv()
 
 LLM_MODEL = "gpt-4o"
 RETRIEVER_K = 5
+RELEVANCE_THRESHOLD = 0.75  # minimum cosine similarity to consider a result useful
 
 SYSTEM_PROMPT = """You are an expert on the Harry Potter universe.
 
@@ -43,20 +44,18 @@ def setup_phoenix_tracing():
 
 
 def _make_tools():
-    retriever = load_vectorstore().as_retriever(
-        search_type="similarity",
-        search_kwargs={"k": RETRIEVER_K},
-    )
+    vectorstore = load_vectorstore()
 
     @tool
     def search_books(query: str) -> str:
         """Search the Harry Potter books for information. Always use this tool first.
         Returns relevant passages with book title and page number citations."""
-        docs = retriever.invoke(query)
-        if not docs:
+        results = vectorstore.similarity_search_with_relevance_scores(query, k=RETRIEVER_K)
+        relevant = [(doc, score) for doc, score in results if score >= RELEVANCE_THRESHOLD]
+        if not relevant:
             return "No relevant passages found in the books."
         parts = []
-        for doc in docs:
+        for doc, _ in relevant:
             book = doc.metadata.get("book", "Unknown")
             page = doc.metadata.get("page", "?")
             parts.append(f"[Source: {book}, Page {page}]\n{doc.page_content}")
@@ -75,11 +74,11 @@ def _make_tools():
     return [search_books, web_search]
 
 
-def build_agent():
+def build_agent(system_prompt: str = SYSTEM_PROMPT):
     """Build a LangGraph ReAct agent with book search and web fallback."""
     tools = _make_tools()
     llm = ChatOpenAI(model=LLM_MODEL, temperature=0)
-    return create_react_agent(llm, tools, prompt=SYSTEM_PROMPT)
+    return create_react_agent(llm, tools, prompt=system_prompt)
 
 
 if __name__ == "__main__":

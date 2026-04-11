@@ -10,7 +10,8 @@ Usage:
 """
 
 import argparse
-from rag import build_agent, setup_phoenix_tracing
+from rag import setup_phoenix_tracing
+from orchestrator import build_orchestrator
 from cache import get_cache
 from judge import judge_response
 
@@ -49,12 +50,12 @@ def main():
     args = parse_args()
 
     setup_phoenix_tracing()
-    agent = build_agent()
+    orchestrator = build_orchestrator()
     cache = get_cache(args.cache, ttl=args.ttl)
 
     label = _ttl_label(args.cache, args.ttl)
     print("\n╔══════════════════════════════════════╗")
-    print("║   Harry Potter RAG Agent  🧙          ║")
+    print("║   Harry Potter RAG Agent              ║")
     print(f"║   Cache: {label:<28}║")
     print("║   Type 'quit' or 'exit' to stop       ║")
     print("╚══════════════════════════════════════╝\n")
@@ -80,11 +81,11 @@ def main():
                     print(f"\nAgent (from cache): {cached_answer}\n")
                     continue
 
-            # Cache miss — invoke the agent
-            result = agent.invoke({"messages": [("human", query)]})
-            messages = result["messages"]
-            answer = messages[-1].content
+            # Cache miss — invoke the orchestrator
+            answer, messages, route = orchestrator.invoke(query)
 
+            route_label = {"harry_potter": "HP Agent", "other_chars": "Others Agent", "both": "Both Agents"}.get(route, route)
+            print(f"\n[Orchestrator] Routed to: {route_label}")
             print(f"\nAgent: {answer}\n")
 
             # Judge the response (skip for cache hits — answer was already judged)
